@@ -1,7 +1,14 @@
+// import 'package:flutter/material.dart';
+// import 'package:lunar/pages/auth_page.dart';
+// import 'package:firebase_core/firebase_core.dart';
+// import 'firebase_options.dart';
+
 import 'package:flutter/material.dart';
-import 'package:lunar/pages/auth_page.dart';
+import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'routes/app_pages.dart';
+import 'pages/auth_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +50,7 @@ void main() async {
 //   }
 // }
 
-class MyApp extends StatelessWidget {
+/*class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
@@ -51,6 +58,20 @@ class MyApp extends StatelessWidget {
     return const MaterialApp(
       debugShowCheckedModeBanner: false, // Untuk menghilangkan banner debug
       home: AuthPage(), // LoginPage akan menjadi halaman pertama
+    );
+  }
+}*/
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Lunar',
+      home: const AuthPage(), // Ini halaman yang nentuin arah pertama
+      getPages: AppPages.routes,
     );
   }
 }
