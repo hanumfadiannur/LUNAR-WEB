@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:lunar/pages/content_page.dart';
-import 'package:lunar/pages/history_page.dart';
-import 'package:lunar/pages/home_page.dart';
-import 'package:lunar/pages/profile_page.dart'; // Import ProfilePage
+import 'package:get/get.dart';
+import 'package:lunar/routes/app_routes.dart'; // Import ProfilePage
 
 class SidebarMenu extends StatelessWidget {
   const SidebarMenu({super.key});
@@ -16,7 +14,7 @@ class SidebarMenu extends StatelessWidget {
           .collection('users')
           .doc(user.uid)
           .get();
-      return userDoc.exists ? userDoc['name'] ?? "User" : "User";
+      return userDoc.exists ? userDoc['fullname'] ?? "User" : "User";
     }
     return "User";
   }
@@ -40,11 +38,7 @@ class SidebarMenu extends StatelessWidget {
                     style: TextStyle(color: Colors.black)),
                 currentAccountPicture: GestureDetector(
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const ProfilePage()),
-                    );
+                    Get.toNamed(AppRoutes.profile);
                   },
                   child: const CircleAvatar(
                     backgroundColor: Color(0xFFF45F69),
@@ -53,11 +47,7 @@ class SidebarMenu extends StatelessWidget {
                 ),
                 decoration: const BoxDecoration(color: Color(0xFFFFCCCF)),
                 onDetailsPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const ProfilePage()),
-                  );
+                  Get.toNamed(AppRoutes.profile);
                 },
               );
             },
@@ -66,30 +56,21 @@ class SidebarMenu extends StatelessWidget {
             leading: const Icon(Icons.home, color: Colors.black),
             title: const Text("Home"),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HomePage()),
-              );
+              Get.toNamed(AppRoutes.home);
             },
           ),
           ListTile(
             leading: const Icon(Icons.history, color: Colors.black),
             title: const Text("History"),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HistoryPage()),
-              );
+              Get.toNamed(AppRoutes.history);
             },
           ),
           ListTile(
             leading: const Icon(Icons.article, color: Colors.black),
             title: const Text("Content"),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ContentPage()),
-              );
+              Get.toNamed(AppRoutes.content);
             },
           ),
         ],

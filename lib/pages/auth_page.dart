@@ -29,35 +29,40 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:lunar/pages/home/binding/home_binding.dart';
-import 'package:lunar/pages/home/view/home_view.dart';
-import 'package:lunar/pages/signin/binding/signin_binding.dart';
-import 'package:lunar/pages/signin/view/signin_view.dart';
+import 'package:lunar/routes/app_routes.dart';
 
 class AuthPage extends StatelessWidget {
   const AuthPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        // Show loading while waiting for connection
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-          if (snapshot.hasData) {
-            // Inject HomeBinding sebelum buka HomeView
-            HomeBinding().dependencies();
-            return const HomeView();
-          } else {
-            // Inject SignInBinding sebelum buka SignInView
-            SignInBinding().dependencies();
-            return const SignInView();
-          }
-        },
-      ),
+        // Only navigate if connection is done and no error
+        if (snapshot.connectionState == ConnectionState.active) {
+          final user = snapshot.data;
+
+          // Delay navigation to avoid calling it during build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (user == null) {
+              Get.offAllNamed(AppRoutes.signin);
+            } else {
+              Get.offAllNamed(AppRoutes.home);
+            }
+          });
+        }
+
+        // Return a blank scaffold while waiting
+        return const Scaffold(body: SizedBox.shrink());
+      },
     );
   }
 }
