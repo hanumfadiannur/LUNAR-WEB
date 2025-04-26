@@ -226,7 +226,6 @@ class _CalendarViewState extends State<CalendarView> {
                       iconColor = Colors.grey;
                       eventColor = Color.fromARGB(255, 248, 213, 215);
                     } else {
-                      // No action for undefined types, but you can optionally add a fallback here.
                       return Container(); // If the event type does not match, return an empty container.
                     }
 

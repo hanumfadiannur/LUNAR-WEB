@@ -61,28 +61,28 @@ class CalendarController extends GetxController {
     }
 
     // 🔧 DEBUG LOGGING (sekarang aman akses prevPeriodDoc)
-    print("🟢 START DEBUG updateCycleLength");
+    // print("🟢 START DEBUG updateCycleLength");
 
-    if (currentStartDate != null) {
-      print("📅 Start date bulan ini: $currentStartDate");
+    // if (currentStartDate != null) {
+    //   print("📅 Start date bulan ini: $currentStartDate");
 
-      if (prevPeriodDoc != null && prevPeriodDoc.exists) {
-        var prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
-        if (prevStartDate != null) {
-          print("📅 Start date bulan lalu: $prevStartDate");
-        } else {
-          print("❌ Start date bulan lalu tidak ditemukan.");
-        }
-      } else {
-        print("❌ Data periode bulan lalu tidak ditemukan.");
-      }
-    } else {
-      print("❌ Start date bulan ini tidak ditemukan.");
-    }
+    //   if (prevPeriodDoc != null && prevPeriodDoc.exists) {
+    //     var prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
+    //     if (prevStartDate != null) {
+    //       print("📅 Start date bulan lalu: $prevStartDate");
+    //     } else {
+    //       print("❌ Start date bulan lalu tidak ditemukan.");
+    //     }
+    //   } else {
+    //     print("❌ Data periode bulan lalu tidak ditemukan.");
+    //   }
+    // } else {
+    //   print("❌ Start date bulan ini tidak ditemukan.");
+    // }
 
-    print("🛑 END DEBUG updateCycleLength");
+    // print("🛑 END DEBUG updateCycleLength");
 
-    print("🔁 Cycle length: $cycleLength hari");
+    // print("🔁 Cycle length: $cycleLength hari");
 
     return cycleLength;
   }
@@ -327,14 +327,14 @@ class CalendarController extends GetxController {
             'periodLength': newPeriodLength,
           });
 
-          // 🔄 Update prediksi & cycleLength di user doc + simpan prediksi
+          // Update prediksi & cycleLength di user doc + simpan prediksi
           final userRef =
               FirebaseFirestore.instance.collection('users').doc(userId);
           final userDoc = await userRef.get();
           if (userDoc.exists) {
             final userData = userDoc.data();
             if (userData != null) {
-              // 🔁 Hitung ulang cycle length berdasarkan start_date yang baru
+              // Hitung ulang cycle length berdasarkan start_date yang baru
               final updatedStartDate =
                   startDate; // Ambil start_date terbaru dari periodRef
               final newCycleLength = await updateCycleLength(updatedStartDate);
@@ -353,7 +353,7 @@ class CalendarController extends GetxController {
               final predYear = DateFormat('yyyy').format(predictedStart);
               final predMonth = DateFormat('MM').format(predictedStart);
 
-              // ⬆️ Simpan ke user doc
+              // Simpan ke user doc
               await FirebaseFirestore.instance
                   .collection('users')
                   .doc(userId)
@@ -364,7 +364,7 @@ class CalendarController extends GetxController {
                 'lastPeriodEndDate': Timestamp.fromDate(eventDate),
               });
 
-              // ⬆️ Simpan prediksi baru
+              // Simpan prediksi baru
               await FirebaseFirestore.instance
                   .collection('users')
                   .doc(userId)
@@ -385,7 +385,7 @@ class CalendarController extends GetxController {
     } else if (eventType == 'noteOnly') {
       final formattedDate = DateFormat('yyyy-MM-dd').format(eventDate);
 
-      // ⬆️ Simpan ke Firestore
+      // Simpan ke Firestore
       await periodRef.set({
         'notes': {
           formattedDate: note ?? '',
@@ -519,26 +519,26 @@ class CalendarController extends GetxController {
   }
 
   // Fungsi untuk mengatur radio button "Start" atau "End"
-  void onStartMarkedChanged(bool value) {
-    isStartMarked.value = value;
-    if (value) {
-      // Ketika Start dipilih, End dihitung otomatis berdasarkan siklus
-      final startDate = selectedDay.value ?? DateTime.now();
-      markStartEndPeriod(startDate);
-    } else {
-      // Hapus event yang ada jika Start dibatalkan
-      isEndMarked.value = false;
-      update();
-    }
-  }
+  // void onStartMarkedChanged(bool value) {
+  //   isStartMarked.value = value;
+  //   if (value) {
+  //     // Ketika Start dipilih, End dihitung otomatis berdasarkan siklus
+  //     final startDate = selectedDay.value ?? DateTime.now();
+  //     markStartEndPeriod(startDate);
+  //   } else {
+  //     // Hapus event yang ada jika Start dibatalkan
+  //     isEndMarked.value = false;
+  //     update();
+  //   }
+  // }
 
-  void onEndMarkedChanged(bool value) {
-    isEndMarked.value = value;
-    if (value) {
-      final startDate = selectedDay.value ?? DateTime.now();
-      markStartEndPeriod(startDate);
-    }
-  }
+  // void onEndMarkedChanged(bool value) {
+  //   isEndMarked.value = value;
+  //   if (value) {
+  //     final startDate = selectedDay.value ?? DateTime.now();
+  //     markStartEndPeriod(startDate);
+  //   }
+  // }
 
   Future<void> fetchNextPeriodPrediction() async {
     DateTime now = DateTime.now();
