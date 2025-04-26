@@ -136,6 +136,8 @@ class CalendarController extends GetxController {
             'notes': notes, // Update notes
           });
 
+          events.refresh();
+
           print('Start and End dates reset in Firestore.');
         } else {
           // Handle the case where startDate doesn't match selectedDate, or implement endDate logic
@@ -164,6 +166,7 @@ class CalendarController extends GetxController {
     } catch (e) {
       print('Error updating Firestore: $e');
     }
+    events.refresh();
   }
 
   Future<void> removeNote(DateTime eventDate) async {
@@ -206,6 +209,8 @@ class CalendarController extends GetxController {
         await periodRef.update({'notes': notes});
       }
     }
+
+    events.refresh();
   }
 
   void onDaySelected(DateTime selected, DateTime focused) {
@@ -389,6 +394,7 @@ class CalendarController extends GetxController {
 
       print('Note added to Firestore & local map.');
     }
+    events.refresh();
   }
 
   Future<void> markStartEndPeriod(DateTime startDate,
@@ -490,8 +496,7 @@ class CalendarController extends GetxController {
 
         final predictedStart = updatedStartDate
             .add(Duration(days: cycleLength)); // Gunakan cycleLength terbaru
-        final predictedEnd =
-            predictedStart.add(Duration(days: periodLength - 1));
+        final predictedEnd = predictedStart.add(Duration(days: periodLength));
 
         final predYear = DateFormat('yyyy').format(predictedStart);
         final predMonth = DateFormat('MM').format(predictedStart);

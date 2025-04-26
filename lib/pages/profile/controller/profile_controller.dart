@@ -38,7 +38,8 @@ class ProfileController extends GetxController {
             DateTime endDate = endTimestamp.toDate();
 
             // Simpan jarak hari sebagai periodLength
-            int length = endDate.difference(startDate).inDays;
+            int length = endDate.difference(startDate).inDays +
+                1; // Tambah 1 hari untuk menghitung panjang periode
             periodLength.value = length;
 
             // Optional: simpan juga ke Firestore kalau mau update di database

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'register_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'home_page.dart';
+// import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -64,10 +64,10 @@ class _LoginPageState extends State<LoginPage> {
         );
 
         // Navigate to HomePage kalau login success
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
+        // Navigator.pushReplacement(
+        //   context,
+        //   MaterialPageRoute(builder: (context) => const HomePage()),
+        // );
       } on FirebaseAuthException catch (e) {
         String errorMessage = 'Login failed';
         if (e.code == 'user-not-found') {
@@ -173,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
                             decoration: InputDecoration(
                               labelText: "Email",
                               prefixIcon:
-                              const Icon(Icons.email, color: Colors.pink),
+                                  const Icon(Icons.email, color: Colors.pink),
                               labelStyle: GoogleFonts.comfortaa(
                                 color: Colors.pink[800],
                               ),
@@ -188,7 +188,7 @@ class _LoginPageState extends State<LoginPage> {
                             decoration: InputDecoration(
                               labelText: "Password",
                               prefixIcon:
-                              const Icon(Icons.lock, color: Colors.pink),
+                                  const Icon(Icons.lock, color: Colors.pink),
                               labelStyle: GoogleFonts.comfortaa(
                                 color: Colors.pink[800],
                               ),
@@ -220,7 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                                 backgroundColor: Colors.pink[400],
                                 foregroundColor: Colors.white,
                                 padding:
-                                const EdgeInsets.symmetric(vertical: 16),
+                                    const EdgeInsets.symmetric(vertical: 16),
                                 textStyle: GoogleFonts.comfortaa(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -268,7 +268,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
 
 /*import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
