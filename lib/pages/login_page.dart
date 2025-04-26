@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'register_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -46,13 +47,11 @@ class _LoginPageState extends State<LoginPage> {
   void _submitForm() async {
     if (_formKey.currentState!.validate()) {
       try {
-        // Login dengan Firebase Authentication
         await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
 
-        // Jika login berhasil, StreamBuilder di AuthPage akan otomatis berpindah ke HomePage
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Login successful!'),
@@ -62,6 +61,12 @@ class _LoginPageState extends State<LoginPage> {
             ),
             backgroundColor: Colors.green,
           ),
+        );
+
+        // Navigate to HomePage kalau login success
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
         );
       } on FirebaseAuthException catch (e) {
         String errorMessage = 'Login failed';
@@ -168,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
                             decoration: InputDecoration(
                               labelText: "Email",
                               prefixIcon:
-                                  const Icon(Icons.email, color: Colors.pink),
+                              const Icon(Icons.email, color: Colors.pink),
                               labelStyle: GoogleFonts.comfortaa(
                                 color: Colors.pink[800],
                               ),
@@ -183,7 +188,7 @@ class _LoginPageState extends State<LoginPage> {
                             decoration: InputDecoration(
                               labelText: "Password",
                               prefixIcon:
-                                  const Icon(Icons.lock, color: Colors.pink),
+                              const Icon(Icons.lock, color: Colors.pink),
                               labelStyle: GoogleFonts.comfortaa(
                                 color: Colors.pink[800],
                               ),
@@ -215,7 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                                 backgroundColor: Colors.pink[400],
                                 foregroundColor: Colors.white,
                                 padding:
-                                    const EdgeInsets.symmetric(vertical: 16),
+                                const EdgeInsets.symmetric(vertical: 16),
                                 textStyle: GoogleFonts.comfortaa(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -242,7 +247,7 @@ class _LoginPageState extends State<LoginPage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (context) => RegisterPage()),
+                              builder: (context) => const RegisterPage()),
                         );
                       },
                       child: Text(
@@ -263,6 +268,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
 
 /*import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
