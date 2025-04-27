@@ -38,7 +38,7 @@ class CalendarController extends GetxController {
   }
 
   Future<int> updateCycleLength(DateTime currentStartDate) async {
-    int cycleLength = 28;
+    int cycleLength = 27;
 
     final prevMonthDate = currentStartDate.subtract(Duration(days: 30));
     final prevMonth = DateFormat('MM').format(prevMonthDate);
@@ -234,7 +234,7 @@ class CalendarController extends GetxController {
         await FirebaseFirestore.instance.collection('users').doc(userId).get();
 
     if (userDoc.exists) {
-      userCycleLength.value = userDoc['cycleLength'] ?? 28;
+      userCycleLength.value = userDoc['cycleLength'];
     }
   }
 
@@ -555,7 +555,7 @@ class CalendarController extends GetxController {
     final userData = userDoc.data();
     final lastPeriodStartDate = userData?['lastPeriodStartDate']?.toDate();
     final cycleLength =
-        userData?['cycleLength'] ?? 28; // Default cycle length 28 hari
+        userData?['cycleLength']; // Default cycle length 28 hari
 
     if (lastPeriodStartDate == null) {
       nextPeriodPrediction.value = "Last period start date is not available.";
