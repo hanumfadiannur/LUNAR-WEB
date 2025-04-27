@@ -82,7 +82,7 @@ class HistoryController extends GetxController {
           }
 
           // Menghitung panjang periode dan selisih hari
-          final period = end.difference(start).inDays;
+          final period = data['periodLength'] ?? 0;
           final daysDifference = DateTime.now().difference(start).inDays;
 
           // Menambahkan data siklus ke dalam history

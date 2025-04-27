@@ -34,9 +34,8 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
           'cycleLength': int.parse(cycleController.text),
           'lastPeriodStartDate': Timestamp.fromDate(startDate!),
           'lastPeriodEndDate': Timestamp.fromDate(endDate!),
-          'periodLength': endDate!
-              .difference(startDate!)
-              .inDays, // hitung panjang menstruasi
+          'periodLength': (endDate!.difference(startDate!).inDays +
+              1), // hitung panjang menstruasi
         }, SetOptions(merge: true));
 
         // 2. Simpan data periode ke subcollection 'periods/{year}/{month}/'
@@ -49,6 +48,7 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
           'start_date': Timestamp.fromDate(startDate!),
           'end_date': Timestamp.fromDate(endDate!),
           'notes': {},
+          'periodLength': (endDate!.difference(startDate!).inDays + 1),
         });
 
         // 3. Hitung prediksi periode berikutnya

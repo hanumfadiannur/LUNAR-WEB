@@ -38,51 +38,98 @@ class CalendarController extends GetxController {
   }
 
   Future<int> updateCycleLength(DateTime currentStartDate) async {
-    int cycleLength = 27;
+    int cycleLength = 27; // Default
 
-    final prevMonthDate = currentStartDate.subtract(Duration(days: 30));
-    final prevMonth = DateFormat('MM').format(prevMonthDate);
-    final prevYear = DateFormat('yyyy').format(prevMonthDate);
+    DateTime now = DateTime.now();
+    int thisMonth = now.month;
+    int thisYear = now.year;
 
-    var prevPeriodDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('periods')
-        .doc(prevYear)
-        .collection(prevMonth)
-        .doc('active')
-        .get();
+    int oneMonthBefore = thisMonth - 1;
+    int oneMonthBeforeYear = thisYear;
+    if (oneMonthBefore == 0) {
+      oneMonthBefore = 12;
+      oneMonthBeforeYear -= 1;
+    }
 
-    if (prevPeriodDoc.exists) {
-      var prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
+    // Kalau currentStartDate adalah bulan sebelum bulan sekarang
+    if (currentStartDate.month == oneMonthBefore &&
+        currentStartDate.year == oneMonthBeforeYear) {
+      final thisMonthStr = thisMonth.toString().padLeft(2, '0');
+      var currentPeriodDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('periods')
+          .doc(thisYear.toString())
+          .collection(thisMonthStr)
+          .doc('active')
+          .get();
+
+      if (currentPeriodDoc.exists) {
+        var startDate = currentPeriodDoc.data()?['start_date']?.toDate();
+        if (startDate != null) {
+          cycleLength = startDate.difference(currentStartDate).inDays;
+        }
+      }
+    } else {
+      // Logika sebelumnya: cek bulan sebelumnya, lalu bulan sesudahnya kalau gagal
+      int prevYear = currentStartDate.year;
+      int prevMonth = currentStartDate.month - 1;
+      if (prevMonth == 0) {
+        prevMonth = 12;
+        prevYear -= 1;
+      }
+      final prevMonthStr = prevMonth.toString().padLeft(2, '0');
+
+      var prevPeriodDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('periods')
+          .doc(prevYear.toString())
+          .collection(prevMonthStr)
+          .doc('active')
+          .get();
+
+      DateTime? prevStartDate;
+      if (prevPeriodDoc.exists) {
+        prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
+      }
+
       if (prevStartDate != null) {
         cycleLength = currentStartDate.difference(prevStartDate).inDays;
+      } else {
+        // Coba bulan setelahnya
+        int nextYear = currentStartDate.year;
+        int nextMonth = currentStartDate.month + 1;
+        if (nextMonth == 13) {
+          nextMonth = 1;
+          nextYear += 1;
+        }
+
+        final nextMonthStr = nextMonth.toString().padLeft(2, '0');
+        var nextPeriodDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('periods')
+            .doc(nextYear.toString())
+            .collection(nextMonthStr)
+            .doc('active')
+            .get();
+
+        DateTime? nextStartDate;
+        if (nextPeriodDoc.exists) {
+          nextStartDate = nextPeriodDoc.data()?['start_date']?.toDate();
+        }
+
+        if (nextStartDate != null) {
+          cycleLength = nextStartDate.difference(currentStartDate).inDays;
+        }
       }
     }
 
-    // 🔧 DEBUG LOGGING (sekarang aman akses prevPeriodDoc)
-    // print("🟢 START DEBUG updateCycleLength");
-
-    // if (currentStartDate != null) {
-    //   print("📅 Start date bulan ini: $currentStartDate");
-
-    //   if (prevPeriodDoc != null && prevPeriodDoc.exists) {
-    //     var prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
-    //     if (prevStartDate != null) {
-    //       print("📅 Start date bulan lalu: $prevStartDate");
-    //     } else {
-    //       print("❌ Start date bulan lalu tidak ditemukan.");
-    //     }
-    //   } else {
-    //     print("❌ Data periode bulan lalu tidak ditemukan.");
-    //   }
-    // } else {
-    //   print("❌ Start date bulan ini tidak ditemukan.");
-    // }
-
-    // print("🛑 END DEBUG updateCycleLength");
-
-    // print("🔁 Cycle length: $cycleLength hari");
+    print("🟢 DEBUG updateCycleLength");
+    print("Start Date sekarang: $currentStartDate");
+    print("Cycle Length dihitung: $cycleLength hari");
+    print("🛑 END DEBUG updateCycleLength");
 
     return cycleLength;
   }
@@ -267,7 +314,7 @@ class CalendarController extends GetxController {
   }
 
   Future<void> addEvent(DateTime eventDate, String eventType,
-      {String? note}) async {
+      {String? note, bool saveToFirestore = true}) async {
     final normalizedDate =
         DateTime(eventDate.year, eventDate.month, eventDate.day);
 
@@ -282,6 +329,8 @@ class CalendarController extends GetxController {
     });
 
     events.refresh();
+
+    if (!saveToFirestore) return;
 
     // Simpan ke Firestore
     String year = eventDate.year.toString();
@@ -305,6 +354,33 @@ class CalendarController extends GetxController {
             : {},
       }, SetOptions(merge: true));
       print('Start date saved: $eventDate');
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(userId);
+      final userDoc = await userRef.get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        final lastPeriodStartDate = userData?['lastPeriodStartDate']?.toDate();
+
+        if (lastPeriodStartDate == null) {
+          // Kalau belum ada data, update aja
+          final newCycleLength = await updateCycleLength(eventDate);
+          await userRef.update({'cycleLength': newCycleLength});
+          print('✅ Cycle length updated (no previous start).');
+        } else {
+          // Hitung beda bulan
+          int monthDiff = (lastPeriodStartDate.year - eventDate.year) * 12 +
+              (lastPeriodStartDate.month - eventDate.month);
+
+          if (monthDiff == 1) {
+            final newCycleLength = await updateCycleLength(eventDate);
+            await userRef.update({'cycleLength': newCycleLength});
+            print('✅ Cycle length updated (difference 1 month).');
+          } else {
+            print('⛔ Skip update cycleLength (not 1 month difference).');
+          }
+        }
+      }
     } else if (eventType == 'end') {
       await periodRef.set({
         'end_date': Timestamp.fromDate(eventDate),
@@ -353,16 +429,38 @@ class CalendarController extends GetxController {
               final predYear = DateFormat('yyyy').format(predictedStart);
               final predMonth = DateFormat('MM').format(predictedStart);
 
-              // Simpan ke user doc
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .update({
-                'cycleLength': newCycleLength,
-                'periodLength': newPeriodLength,
-                'lastPeriodStartDate': Timestamp.fromDate(updatedStartDate),
-                'lastPeriodEndDate': Timestamp.fromDate(eventDate),
-              });
+              final userRef =
+                  FirebaseFirestore.instance.collection('users').doc(userId);
+              final userDoc = await userRef.get();
+              if (userDoc.exists) {
+                final userData = userDoc.data();
+                final lastStartDate =
+                    userData?['lastPeriodStartDate']?.toDate();
+                final lastEndDate = userData?['lastPeriodEndDate']?.toDate();
+
+                if (lastStartDate == null ||
+                    updatedStartDate.isAfter(lastStartDate)) {
+                  await userRef.update({
+                    'cycleLength': newCycleLength,
+                    'periodLength': newPeriodLength,
+                    'lastPeriodStartDate': Timestamp.fromDate(updatedStartDate),
+                    'lastPeriodEndDate': Timestamp.fromDate(eventDate),
+                  });
+                } else if (lastStartDate.isAtSameMomentAs(updatedStartDate)) {
+                  // Kalau start_date sama tapi end_date beda, update end_date aja
+                  if (lastEndDate == null ||
+                      eventDate.isAfter(lastEndDate) ||
+                      eventDate.isBefore(lastEndDate)) {
+                    await userRef.update({
+                      'lastPeriodEndDate': Timestamp.fromDate(eventDate),
+                      'periodLength': newPeriodLength,
+                    });
+                  }
+                } else {
+                  print(
+                      'Skip update lastPeriodStartDate di addEvent karena lebih lama.');
+                }
+              }
 
               // Simpan prediksi baru
               await FirebaseFirestore.instance
@@ -479,20 +577,38 @@ class CalendarController extends GetxController {
     if (periodDoc.exists) {
       final updatedStartDate = periodDoc.data()?['start_date']?.toDate();
       if (updatedStartDate != null) {
-        print("Start date yang diperbarui: $updatedStartDate");
-
         // Pastikan siklus panjang terbaru digunakan untuk prediksi
         final cycleLength = await updateCycleLength(
             updatedStartDate); // Gunakan updatedStartDate terbaru
+        final userRef =
+            FirebaseFirestore.instance.collection('users').doc(userId);
+        final userDoc = await userRef.get();
 
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
-          'cycleLength': cycleLength,
-          'lastPeriodStartDate': Timestamp.fromDate(updatedStartDate),
-          'lastPeriodEndDate': Timestamp.fromDate(endDate),
-        });
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          final lastStartDate = userData?['lastPeriodStartDate']?.toDate();
+          final lastEndDate = userData?['lastPeriodEndDate']?.toDate();
+
+          if (lastStartDate == null ||
+              updatedStartDate.isAfter(lastStartDate) ||
+              (updatedStartDate.year == lastStartDate.year &&
+                  updatedStartDate.month == lastStartDate.month &&
+                  updatedStartDate.isBefore(lastStartDate))) {
+            await userRef.update({
+              'cycleLength': cycleLength,
+              'lastPeriodStartDate': Timestamp.fromDate(updatedStartDate),
+              'lastPeriodEndDate': Timestamp.fromDate(endDate),
+            });
+          } else if (isSameDay(updatedStartDate, lastStartDate)) {
+            if (lastEndDate == null || endDate.isAfter(lastEndDate)) {
+              await userRef.update({
+                'lastPeriodEndDate': Timestamp.fromDate(endDate),
+              });
+            }
+          } else {
+            print('❌ Skip update karena tanggal lama dan beda bulan.');
+          }
+        }
 
         final predictedStart = updatedStartDate
             .add(Duration(days: cycleLength)); // Gunakan cycleLength terbaru
@@ -517,28 +633,6 @@ class CalendarController extends GetxController {
       }
     }
   }
-
-  // Fungsi untuk mengatur radio button "Start" atau "End"
-  // void onStartMarkedChanged(bool value) {
-  //   isStartMarked.value = value;
-  //   if (value) {
-  //     // Ketika Start dipilih, End dihitung otomatis berdasarkan siklus
-  //     final startDate = selectedDay.value ?? DateTime.now();
-  //     markStartEndPeriod(startDate);
-  //   } else {
-  //     // Hapus event yang ada jika Start dibatalkan
-  //     isEndMarked.value = false;
-  //     update();
-  //   }
-  // }
-
-  // void onEndMarkedChanged(bool value) {
-  //   isEndMarked.value = value;
-  //   if (value) {
-  //     final startDate = selectedDay.value ?? DateTime.now();
-  //     markStartEndPeriod(startDate);
-  //   }
-  // }
 
   Future<void> fetchNextPeriodPrediction() async {
     DateTime now = DateTime.now();
@@ -638,17 +732,13 @@ class CalendarController extends GetxController {
         endDates['$year-$month'] = end;
 
         // Add events for each start and end date
-        addEvent(
-          start,
-          'start',
-          note: notes[DateFormat('yyyy-MM-dd').format(start)] ?? '',
-        );
+        addEvent(start, 'start',
+            note: notes[DateFormat('yyyy-MM-dd').format(start)] ?? '',
+            saveToFirestore: false);
 
-        addEvent(
-          end,
-          'end',
-          note: notes[DateFormat('yyyy-MM-dd').format(end)] ?? '',
-        );
+        addEvent(end, 'end',
+            note: notes[DateFormat('yyyy-MM-dd').format(end)] ?? '',
+            saveToFirestore: false);
 
         notes.forEach((dateStr, note) {
           final noteDate = DateTime.parse(dateStr);
