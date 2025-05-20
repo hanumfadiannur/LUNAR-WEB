@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:get_storage/get_storage.dart';
 
 class CalendarController extends GetxController {
   Rx<CalendarFormat> calendarFormat = CalendarFormat.month.obs;
@@ -33,104 +37,100 @@ class CalendarController extends GetxController {
   void onInit() {
     super.onInit();
     _fetchUserData();
-    fetchAllPeriodEvents(); // Fetch all events on initialization
-    fetchNextPeriodPrediction(); // Fetch prediction on initialization
+    final box = GetStorage();
+    final idToken = box.read('idToken');
+    if (idToken != null) {
+      fetchAllPeriodEvents(idToken);
+      fetchNextPeriodPrediction(idToken);
+    }
   }
 
   Future<int> updateCycleLength(DateTime currentStartDate) async {
-    int cycleLength = 27; // Default
+    int cycleLength = 27; // Default fallback
+    print("🔁 updateCycleLength() dipanggil untuk $currentStartDate");
 
-    DateTime now = DateTime.now();
-    int thisMonth = now.month;
-    int thisYear = now.year;
-
-    int oneMonthBefore = thisMonth - 1;
-    int oneMonthBeforeYear = thisYear;
-    if (oneMonthBefore == 0) {
-      oneMonthBefore = 12;
-      oneMonthBeforeYear -= 1;
+    // Coba cari bulan sebelumnya dari currentStartDate
+    int prevMonth = currentStartDate.month - 1;
+    int prevYear = currentStartDate.year;
+    if (prevMonth == 0) {
+      prevMonth = 12;
+      prevYear -= 1;
     }
 
-    // Kalau currentStartDate adalah bulan sebelum bulan sekarang
-    if (currentStartDate.month == oneMonthBefore &&
-        currentStartDate.year == oneMonthBeforeYear) {
-      final thisMonthStr = thisMonth.toString().padLeft(2, '0');
-      var currentPeriodDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('periods')
-          .doc(thisYear.toString())
-          .collection(thisMonthStr)
-          .doc('active')
-          .get();
+    final prevMonthStr = prevMonth.toString().padLeft(2, '0');
 
-      if (currentPeriodDoc.exists) {
-        var startDate = currentPeriodDoc.data()?['start_date']?.toDate();
-        if (startDate != null) {
-          cycleLength = startDate.difference(currentStartDate).inDays;
-        }
-      }
+    var prevPeriodDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('periods')
+        .doc(prevYear.toString())
+        .collection(prevMonthStr)
+        .doc('active')
+        .get();
+
+    DateTime? prevStartDate;
+    if (prevPeriodDoc.exists) {
+      prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
+      print("📌 Found prevStartDate in Firestore: $prevStartDate");
+    }
+
+    if (prevStartDate != null) {
+      cycleLength = currentStartDate.difference(prevStartDate).inDays;
+      print("✅ Cycle length dihitung dari bulan sebelumnya: $cycleLength hari");
     } else {
-      // Logika sebelumnya: cek bulan sebelumnya, lalu bulan sesudahnya kalau gagal
-      int prevYear = currentStartDate.year;
-      int prevMonth = currentStartDate.month - 1;
-      if (prevMonth == 0) {
-        prevMonth = 12;
-        prevYear -= 1;
+      // Fallback: cari bulan setelahnya
+      int nextMonth = currentStartDate.month + 1;
+      int nextYear = currentStartDate.year;
+      if (nextMonth == 13) {
+        nextMonth = 1;
+        nextYear += 1;
       }
-      final prevMonthStr = prevMonth.toString().padLeft(2, '0');
 
-      var prevPeriodDoc = await FirebaseFirestore.instance
+      final nextMonthStr = nextMonth.toString().padLeft(2, '0');
+
+      var nextPeriodDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('periods')
-          .doc(prevYear.toString())
-          .collection(prevMonthStr)
+          .doc(nextYear.toString())
+          .collection(nextMonthStr)
           .doc('active')
           .get();
 
-      DateTime? prevStartDate;
-      if (prevPeriodDoc.exists) {
-        prevStartDate = prevPeriodDoc.data()?['start_date']?.toDate();
+      DateTime? nextStartDate;
+      if (nextPeriodDoc.exists) {
+        nextStartDate = nextPeriodDoc.data()?['start_date']?.toDate();
+        print("📌 Found nextStartDate in Firestore: $nextStartDate");
       }
 
-      if (prevStartDate != null) {
-        cycleLength = currentStartDate.difference(prevStartDate).inDays;
+      if (nextStartDate != null) {
+        cycleLength = nextStartDate.difference(currentStartDate).inDays;
+        print(
+            "✅ Cycle length dihitung dari bulan setelahnya: $cycleLength hari");
       } else {
-        // Coba bulan setelahnya
-        int nextYear = currentStartDate.year;
-        int nextMonth = currentStartDate.month + 1;
-        if (nextMonth == 13) {
-          nextMonth = 1;
-          nextYear += 1;
-        }
-
-        final nextMonthStr = nextMonth.toString().padLeft(2, '0');
-        var nextPeriodDoc = await FirebaseFirestore.instance
+        // Fallback terakhir: ambil dari user.lastPeriodStartDate
+        var userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
-            .collection('periods')
-            .doc(nextYear.toString())
-            .collection(nextMonthStr)
-            .doc('active')
             .get();
 
-        DateTime? nextStartDate;
-        if (nextPeriodDoc.exists) {
-          nextStartDate = nextPeriodDoc.data()?['start_date']?.toDate();
-        }
-
-        if (nextStartDate != null) {
-          cycleLength = nextStartDate.difference(currentStartDate).inDays;
+        if (userDoc.exists) {
+          final lastStartDate =
+              userDoc.data()?['lastPeriodStartDate']?.toDate();
+          if (lastStartDate != null &&
+              currentStartDate.isAfter(lastStartDate)) {
+            cycleLength = currentStartDate.difference(lastStartDate).inDays;
+            print(
+                "⚠️ Fallback: dihitung dari lastPeriodStartDate = $lastStartDate → $cycleLength hari");
+          } else {
+            print(
+                "⚠️ Tidak ditemukan data sebelumnya. Gunakan default 27 hari");
+          }
         }
       }
     }
 
-    print("🟢 DEBUG updateCycleLength");
-    print("Start Date sekarang: $currentStartDate");
-    print("Cycle Length dihitung: $cycleLength hari");
-    print("🛑 END DEBUG updateCycleLength");
-
+    print("🟢 Selesai updateCycleLength → cycleLength: $cycleLength hari");
     return cycleLength;
   }
 
@@ -258,16 +258,6 @@ class CalendarController extends GetxController {
     }
 
     events.refresh();
-  }
-
-  void onDaySelected(DateTime selected, DateTime focused) {
-    selectedDay.value = selected;
-    focusedDay.value = focused;
-
-    final monthKey =
-        "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
-    startDate.value = startDates[monthKey];
-    endDate.value = endDates[monthKey];
   }
 
   void onFormatChanged(CalendarFormat format) {
@@ -634,121 +624,134 @@ class CalendarController extends GetxController {
     }
   }
 
-  Future<void> fetchNextPeriodPrediction() async {
-    DateTime now = DateTime.now();
-
-    // Ambil data lastPeriodStartDate dan cycleLength dari Firestore atau model pengguna
-    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
-    final userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      nextPeriodPrediction.value = "No user data available.";
-      return;
-    }
-
-    final userData = userDoc.data();
-    final lastPeriodStartDate = userData?['lastPeriodStartDate']?.toDate();
-    final cycleLength =
-        userData?['cycleLength']; // Default cycle length 28 hari
-
-    if (lastPeriodStartDate == null) {
-      nextPeriodPrediction.value = "Last period start date is not available.";
-      return;
-    }
-
-    // Hitung prediksi periode berikutnya berdasarkan lastPeriodStartDate + cycleLength
-    DateTime nextPeriodStartDate =
-        lastPeriodStartDate.add(Duration(days: cycleLength));
-
-    // Menentukan bulan dan tahun dari prediksi berikutnya
-    String predYear = DateFormat('yyyy').format(nextPeriodStartDate);
-    String predMonth = DateFormat('MM').format(nextPeriodStartDate);
-
+  Future<void> fetchNextPeriodPrediction(String idToken) async {
     try {
-      // Ambil prediksi dari Firestore berdasarkan prediksi bulan dan tahun yang dihitung
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('predictions')
-          .doc(predYear)
-          .collection(predMonth)
-          .doc('active')
-          .get();
+      final url = Uri.parse('http://127.0.0.1:8000/api/user/period-prediction');
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
 
-      if (!snap.exists) {
+      print('Prediction status code: ${response.statusCode}');
+      print('Prediction body: ${response.body}');
+
+      if (response.statusCode != 200) {
         nextPeriodPrediction.value = "No prediction available.";
         return;
       }
 
-      final data = snap.data()!;
-      final ps = (data['predicted_start'] as Timestamp).toDate();
-      final pe = (data['predicted_end'] as Timestamp).toDate();
+      final Map<String, dynamic> body = jsonDecode(response.body);
+      final List<dynamic> eventList = body['events'] ?? [];
 
-      // Set teks prediksi untuk UI
-      nextPeriodPrediction.value = "${DateFormat('MMMM d, y').format(ps)}.";
+      if (eventList.isEmpty) {
+        nextPeriodPrediction.value = "No prediction available.";
+        return;
+      }
 
-      // Tambah event ke kalender (misalnya dengan menggunakan fungsi addEvent)
-      addEvent(ps, 'predicted_start', note: 'Predicted start of next period');
-      addEvent(pe, 'predicted_end', note: 'Predicted end of next period');
+      // ✅ Gunakan fungsi parseEventsFromJson agar terhubung ke kalender
+      parseEventsFromJson(body);
+
+      // ✅ Cari predicted_start untuk UI
+      for (var ev in eventList) {
+        if (ev['type'] == 'predicted_start') {
+          final DateTime ps = DateTime.parse(ev['date']);
+          nextPeriodPrediction.value = " ${DateFormat('MMMM d, y').format(ps)}";
+          break;
+        }
+      }
     } catch (e) {
+      print('Error while fetching prediction: $e');
       nextPeriodPrediction.value = "Error loading prediction.";
-      print("Prediction fetch error: $e");
     }
   }
 
-  // Fungsi untuk mendapatkan event berdasarkan hari yang dipilih
-  List<Map<String, dynamic>> getEventsForDay(DateTime day) {
-    final normalizedDate = DateTime(day.year, day.month, day.day);
-    return events[normalizedDate] ??
-        []; // Mengembalikan event untuk tanggal tersebut
-  }
+  Future<void> fetchAllPeriodEvents(String $idToken) async {
+    try {
+      var response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/user/periods-events'),
+        headers: {
+          'Authorization': 'Bearer ${$idToken}',
+        },
+      );
 
-  Future<void> fetchAllPeriodEvents() async {
-    final year =
-        DateFormat('yyyy').format(DateTime.now()); // Get the current year
+      print('Response status code: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
-    // Loop through all 12 months
-    for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
-      final month =
-          monthIndex.toString().padLeft(2, '0'); // Format month to two digits
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        print('Decoded JSON data: $data');
 
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('periods')
-          .doc(year)
-          .collection(month)
-          .doc('active')
-          .get();
+        parseEventsFromJson(data);
 
-      if (doc.exists) {
-        final data = doc.data()!;
-        final start = (data['start_date'] as Timestamp).toDate();
-        final end = (data['end_date'] as Timestamp).toDate();
-        final notes = Map<String, dynamic>.from(data['notes'] ?? {});
-
-        // Store start and end dates for each month
-        startDates['$year-$month'] = start;
-        endDates['$year-$month'] = end;
-
-        // Add events for each start and end date
-        addEvent(start, 'start',
-            note: notes[DateFormat('yyyy-MM-dd').format(start)] ?? '',
-            saveToFirestore: false);
-
-        addEvent(end, 'end',
-            note: notes[DateFormat('yyyy-MM-dd').format(end)] ?? '',
-            saveToFirestore: false);
-
-        notes.forEach((dateStr, note) {
-          final noteDate = DateTime.parse(dateStr);
-
-          // Skip tanggal start dan end (biar nggak dobel)
-          if (!isSameDay(noteDate, start) && !isSameDay(noteDate, end)) {
-            addEvent(noteDate, 'noteOnly', note: note);
+        print('Events after parsing:');
+        events.forEach((date, eventList) {
+          print('Date: $date');
+          for (var event in eventList) {
+            print(' - Event: $event');
           }
         });
+      } else {
+        print('Failed to fetch events: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error while fetching events: $e');
+    }
+  }
+
+  void parseEventsFromJson(Map<String, dynamic> json) {
+    final newEvents = <DateTime, List<Map<String, dynamic>>>{};
+    List<dynamic> eventList = json['events'] ?? [];
+
+    for (var event in eventList) {
+      DateTime eventDate = DateTime.parse(event['date']);
+      DateTime dateOnly =
+          DateTime(eventDate.year, eventDate.month, eventDate.day);
+
+      // Tambahkan ke events map
+      if (!newEvents.containsKey(dateOnly)) {
+        newEvents[dateOnly] = [];
+      }
+
+      newEvents[dateOnly]!.add({
+        'type': event['type'],
+        'date': event['date'],
+        'notes': event['notes'],
+      });
+
+      // Tambahkan ini untuk mengisi startDates
+      if (event['type'] == 'start') {
+        String monthKey =
+            "${eventDate.year}-${eventDate.month.toString().padLeft(2, '0')}";
+        startDates[monthKey] = dateOnly;
       }
     }
+
+    // Merge newEvents ke events tanpa hapus event lama
+    for (var entry in newEvents.entries) {
+      final existingList = events[entry.key] ?? [];
+      final newList = entry.value
+          .where((e) =>
+              !existingList.any((existing) => existing['type'] == e['type']))
+          .toList();
+
+      if (!events.containsKey(entry.key)) {
+        events[entry.key] = [];
+      }
+      events[entry.key]!.addAll(newList);
+    }
+
+// Pastikan UI tahu ada update
+    events.refresh();
+  }
+
+  List<Map<String, dynamic>> getEventsForDay(DateTime day) {
+    return events[DateTime(day.year, day.month, day.day)] ?? [];
+  }
+
+  void onDaySelected(DateTime selectedDay, DateTime focusedDay) {
+    this.selectedDay.value = selectedDay;
+    this.focusedDay.value = focusedDay;
   }
 }

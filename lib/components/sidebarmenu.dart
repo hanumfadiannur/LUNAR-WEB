@@ -1,74 +1,112 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
-import 'package:lunar/routes/app_routes.dart'; // Import ProfilePage
+import 'package:http/http.dart' as http;
+import 'package:get_storage/get_storage.dart';
+import 'package:lunar/routes/app_routes.dart';
 
 class SidebarMenu extends StatelessWidget {
   const SidebarMenu({super.key});
 
-  Future<String> getUserName() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      return userDoc.exists ? userDoc['fullname'] ?? "User" : "User";
+  Future<Map<String, dynamic>> fetchUserData() async {
+    final storage = GetStorage();
+    final idToken = storage.read('idToken');
+    if (idToken == null) {
+      throw Exception("No token found");
     }
-    return "User";
+
+    var response = await http.get(
+      Uri.parse('http://127.0.0.1:8000/api/user/cycle-status'),
+      headers: {
+        'Authorization': 'Bearer $idToken',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      var data = json.decode(response.body);
+      return data;
+    } else {
+      throw Exception('Failed to fetch user data');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          FutureBuilder<String>(
-            future: getUserName(),
+          FutureBuilder<Map<String, dynamic>>(
+            future: fetchUserData(),
             builder: (context, snapshot) {
-              String displayName = snapshot.data ?? "User";
-              return UserAccountsDrawerHeader(
-                accountName:
-                    Text(displayName, style: TextStyle(color: Colors.black)),
-                accountEmail: Text(user?.email ?? "No Email",
-                    style: TextStyle(color: Colors.black)),
-                currentAccountPicture: GestureDetector(
-                  onTap: () {
-                    Get.toNamed(AppRoutes.profile);
-                  },
-                  child: const CircleAvatar(
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return UserAccountsDrawerHeader(
+                  accountName:
+                      Text('Loading...', style: TextStyle(color: Colors.black)),
+                  accountEmail: Text('', style: TextStyle(color: Colors.black)),
+                  currentAccountPicture: CircleAvatar(
                     backgroundColor: Color(0xFFF45F69),
                     child: Icon(Icons.person, size: 40, color: Colors.black),
                   ),
-                ),
-                decoration: const BoxDecoration(color: Color(0xFFFFCCCF)),
-                onDetailsPressed: () {
-                  Get.toNamed(AppRoutes.profile);
-                },
-              );
+                  decoration: BoxDecoration(color: Color(0xFFFFCCCF)),
+                );
+              } else if (snapshot.hasError) {
+                return UserAccountsDrawerHeader(
+                  accountName:
+                      Text('User', style: TextStyle(color: Colors.black)),
+                  accountEmail: Text('Error loading user',
+                      style: TextStyle(color: Colors.black)),
+                  currentAccountPicture: CircleAvatar(
+                    backgroundColor: Color(0xFFF45F69),
+                    child: Icon(Icons.person, size: 40, color: Colors.black),
+                  ),
+                  decoration: BoxDecoration(color: Color(0xFFFFCCCF)),
+                );
+              } else {
+                final data = snapshot.data!;
+                final fullname = data['fullname'] ?? 'User';
+                final email =
+                    data['email'] ?? ''; // kalau backend sediain email
+
+                return UserAccountsDrawerHeader(
+                  accountName:
+                      Text(fullname, style: TextStyle(color: Colors.black)),
+                  accountEmail:
+                      Text(email, style: TextStyle(color: Colors.black)),
+                  currentAccountPicture: GestureDetector(
+                    onTap: () {
+                      Get.toNamed(AppRoutes.profile);
+                    },
+                    child: CircleAvatar(
+                      backgroundColor: Color(0xFFF45F69),
+                      child: Icon(Icons.person, size: 40, color: Colors.black),
+                    ),
+                  ),
+                  decoration: BoxDecoration(color: Color(0xFFFFCCCF)),
+                  onDetailsPressed: () {
+                    Get.toNamed(AppRoutes.profile);
+                  },
+                );
+              }
             },
           ),
           ListTile(
-            leading: const Icon(Icons.home, color: Colors.black),
-            title: const Text("Home"),
+            leading: Icon(Icons.home, color: Colors.black),
+            title: Text("Home"),
             onTap: () {
               Get.toNamed(AppRoutes.home);
             },
           ),
           ListTile(
-            leading: const Icon(Icons.history, color: Colors.black),
-            title: const Text("History"),
+            leading: Icon(Icons.history, color: Colors.black),
+            title: Text("History"),
             onTap: () {
               Get.toNamed(AppRoutes.history);
             },
           ),
           ListTile(
-            leading: const Icon(Icons.article, color: Colors.black),
-            title: const Text("Content"),
+            leading: Icon(Icons.article, color: Colors.black),
+            title: Text("Content"),
             onTap: () {
               Get.toNamed(AppRoutes.content);
             },

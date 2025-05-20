@@ -1,15 +1,17 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:lunar/components/cycle_input_dialog.dart';
-
+import 'package:http/http.dart' as http;
+import 'package:get_storage/get_storage.dart';
 import '../../../routes/app_routes.dart';
+import '../../../components/cycle_input_dialog.dart';
 
 class SignInController extends GetxController {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   var isPasswordVisible = false.obs;
+
+  final storage = GetStorage();
 
   String? validateEmail(String? value) {
     if (value == null || value.isEmpty) {
@@ -34,53 +36,48 @@ class SignInController extends GetxController {
   void submit(GlobalKey<FormState> formKey) async {
     if (formKey.currentState!.validate()) {
       try {
-        // Sign in user
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: emailController.text.trim(),
-          password: passwordController.text.trim(),
+        final response = await http.post(
+          Uri.parse('http://127.0.0.1:8000/api/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': emailController.text.trim(),
+            'password': passwordController.text.trim(),
+          }),
         );
 
-        final user = FirebaseAuth.instance.currentUser;
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final hasCycleData = data['hasCycleData'] == true;
 
-        if (user != null) {
-          final userDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+          final uid = data['uid'];
+          final idToken = data['idToken'];
 
-          final data = userDoc.data();
-          final hasCycleData = data != null &&
-              data['cycleLength'] != null &&
-              data['lastPeriodStartDate'] != null &&
-              data['lastPeriodEndDate'] != null;
+          storage.write('uid', uid);
+          storage.write('idToken', idToken);
 
-          // Jika belum ada data siklus menstruasi
           if (!hasCycleData) {
             await Get.dialog(
               CycleInputDialog(
-                  userId: user.uid), // custom dialog yang kamu buat
+                userId: uid,
+                idToken: idToken,
+                onDataSaved: () {
+                  Get.offAllNamed(AppRoutes.home);
+                },
+              ),
               barrierDismissible: false,
             );
+          } else {
+            Get.offAllNamed(AppRoutes.home);
           }
-
-          // Snackbar success login
-          Get.snackbar('Success', 'Login successful!',
+        } else {
+          final error = jsonDecode(response.body);
+          Get.snackbar('Error', error['error'] ?? 'Login failed',
               snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Colors.green,
+              backgroundColor: Colors.red,
               colorText: Colors.white);
-
-          // Redirect ke home
-          Get.offAllNamed(AppRoutes.home);
         }
-      } on FirebaseAuthException catch (e) {
-        String errorMessage = 'Login failed';
-        if (e.code == 'user-not-found') {
-          errorMessage = 'No user found for this email.';
-        } else if (e.code == 'wrong-password') {
-          errorMessage = 'Incorrect password.';
-        }
-
-        Get.snackbar('Error', errorMessage,
+      } catch (e) {
+        Get.snackbar('Error', 'Login failed',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Colors.red,
             colorText: Colors.white);

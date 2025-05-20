@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:lunar/routes/app_routes.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class CycleInputDialog extends StatefulWidget {
-  final String userId;
-  const CycleInputDialog({required this.userId});
+  final String userId, idToken;
+  final VoidCallback onDataSaved;
+
+  const CycleInputDialog({
+    required this.userId,
+    required this.idToken,
+    required this.onDataSaved,
+    Key? key,
+  }) : super(key: key);
 
   @override
   _CycleInputDialogState createState() => _CycleInputDialogState();
@@ -23,68 +29,39 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
         startDate != null &&
         endDate != null) {
       try {
-        final userRef =
-            FirebaseFirestore.instance.collection('users').doc(widget.userId);
-        final year = startDate!.year.toString();
-        final month = startDate!.month.toString().padLeft(2, '0');
-        final periodLength = endDate!.difference(startDate!).inDays;
-
-        // 1. Simpan data utama user (merge)
-        await userRef.set({
-          'cycleLength': int.parse(cycleController.text),
-          'lastPeriodStartDate': Timestamp.fromDate(startDate!),
-          'lastPeriodEndDate': Timestamp.fromDate(endDate!),
-          'periodLength': (endDate!.difference(startDate!).inDays +
-              1), // hitung panjang menstruasi
-        }, SetOptions(merge: true));
-
-        // 2. Simpan data periode ke subcollection 'periods/{year}/{month}/'
-        await userRef
-            .collection('periods')
-            .doc(year)
-            .collection(month)
-            .doc('active')
-            .set({
-          'start_date': Timestamp.fromDate(startDate!),
-          'end_date': Timestamp.fromDate(endDate!),
-          'notes': {},
-          'periodLength': (endDate!.difference(startDate!).inDays + 1),
-        });
-
-        // 3. Hitung prediksi periode berikutnya
-        DateTime predictedStart =
-            startDate!.add(Duration(days: int.parse(cycleController.text)));
-        DateTime predictedEnd =
-            predictedStart.add(Duration(days: periodLength));
-
-        final predYear = predictedStart.year.toString();
-        final predMonth = predictedStart.month.toString().padLeft(2, '0');
-
-        // 4. Simpan prediksi ke subcollection 'predictions/{year}/{month}/'
-        await userRef
-            .collection('predictions')
-            .doc(predYear)
-            .collection(predMonth)
-            .doc('active')
-            .set({
-          'predicted_start': Timestamp.fromDate(predictedStart),
-          'predicted_end': Timestamp.fromDate(predictedEnd),
-          'created_at': FieldValue.serverTimestamp(),
-          'is_confirmed': false,
-        });
-
-        // 5. Snackbar sukses + redirect
-        Get.snackbar(
-          'Success',
-          'Data saved successfully!',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
+        final response = await http.post(
+          Uri.parse('http://127.0.0.1:8000/api/cycle'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${widget.idToken}',
+          },
+          body: jsonEncode({
+            'cycleLength': int.parse(cycleController.text),
+            'lastPeriodStartDate': startDate!.toIso8601String(),
+            'lastPeriodEndDate': endDate!.toIso8601String(),
+          }),
         );
 
-        Get.back();
-        Get.offAllNamed(AppRoutes
-            .home); // pastikan route `home` sudah didaftarkan di AppRoutes
+        if (response.statusCode == 200) {
+          Get.snackbar(
+            'Success',
+            'Data saved successfully!',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+
+          widget
+              .onDataSaved(); // Callback untuk memberitahu bahwa data sudah disimpan
+          Get.back(); // Tutup dialog
+        } else {
+          Get.snackbar(
+            'Error',
+            'Failed to save data: ${response.body}',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        }
       } catch (e) {
         Get.snackbar(
           'Error',
@@ -96,6 +73,22 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
     } else {
       Get.snackbar('Invalid', 'Please fill all fields!',
           backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
+  Future<void> _selectDate({
+    required DateTime? initialDate,
+    required ValueChanged<DateTime> onDateSelected,
+  }) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      onDateSelected(picked);
     }
   }
 
@@ -115,6 +108,7 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Cycle Length Input
               TextFormField(
                 controller: cycleController,
                 decoration: InputDecoration(
@@ -131,78 +125,64 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
               ),
               const SizedBox(height: 20),
 
-              // Start Date
+              // Start Date Picker
               GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now().subtract(Duration(days: 30)),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) setState(() => startDate = picked);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                onTap: () => _selectDate(
+                  initialDate: startDate ?? DateTime.now(),
+                  onDateSelected: (pickedDate) {
+                    setState(() {
+                      startDate = pickedDate;
+                    });
+                  },
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Select Start Date: ',
-                        style: GoogleFonts.dmSans(fontSize: 16),
+                        startDate != null
+                            ? 'Start Date: ${startDate!.toLocal().toString().split(' ')[0]}'
+                            : 'Select Start Date',
+                        style: TextStyle(fontSize: 16),
                       ),
-                      Expanded(
-                        child: Text(
-                          startDate != null
-                              ? '${startDate!.toLocal()}'.split(' ')[0]
-                              : 'Not selected',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 16,
-                            color:
-                                startDate != null ? Colors.black : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
+                      Icon(Icons.calendar_today),
                     ],
                   ),
                 ),
               ),
-
               const SizedBox(height: 10),
 
-              // End Date
+              // End Date Picker
               GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.now().subtract(Duration(days: 27)),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) setState(() => endDate = picked);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                onTap: () => _selectDate(
+                  initialDate: endDate ?? DateTime.now(),
+                  onDateSelected: (pickedDate) {
+                    setState(() {
+                      endDate = pickedDate;
+                    });
+                  },
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Select End Date: ',
-                        style: GoogleFonts.dmSans(fontSize: 16),
+                        endDate != null
+                            ? 'End Date: ${endDate!.toLocal().toString().split(' ')[0]}'
+                            : 'Select End Date',
+                        style: TextStyle(fontSize: 16),
                       ),
-                      Expanded(
-                        child: Text(
-                          endDate != null
-                              ? '${endDate!.toLocal()}'.split(' ')[0]
-                              : 'Not selected',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 16,
-                            color: endDate != null ? Colors.black : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
+                      Icon(Icons.calendar_today),
                     ],
                   ),
                 ),
@@ -211,55 +191,14 @@ class _CycleInputDialogState extends State<CycleInputDialog> {
           ),
         ),
       ),
-      actionsAlignment: MainAxisAlignment.center,
-      actionsPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       actions: [
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushReplacementNamed(context, '/signin');
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: Colors.black, // background hitam penuh
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Cancel',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: saveData,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Save',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ],
+        ElevatedButton(
+          onPressed: saveData,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: Text('Save'),
         ),
       ],
     );

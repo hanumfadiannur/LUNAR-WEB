@@ -93,7 +93,7 @@ class HomeView extends GetView<HomeController> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(controller.todayDate,
+                child: Text(controller.formattedDate,
                     style: GoogleFonts.dmSans(
                         fontSize: 16, fontWeight: FontWeight.bold)),
               ),

@@ -1,23 +1,25 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:lunar/pages/auth_page.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class HomeController extends GetxController {
-  final user = FirebaseAuth.instance.currentUser!;
-  final todayDate = DateFormat("d MMM").format(DateTime.now());
-  var currentCycleMessage = ''.obs; // RxString
-  var currentCycleStatus = ''.obs; // RxString
-  var currentDay = 0.obs; // RxInt
-  var fullname = ''.obs; // RxString
+  var fullname = ''.obs;
+  var currentCycleMessage = ''.obs;
+  var currentCycleStatus = ''.obs;
+  var todaydate = DateTime.now();
+  var formattedDate = DateFormat('dd/MM/yyyy').format(DateTime.now());
 
   @override
   void onInit() {
     super.onInit();
-    fetchUserData(); // Ambil data pengguna saat inisialisasi
-    _checkCycleStatus();
+    final storage = GetStorage();
+    final idToken = storage.read('idToken');
+    if (idToken != null) {
+      fetchUserCycleStatus(idToken);
+    }
   }
 
   final List<Map<String, dynamic>> contentList = [
@@ -65,96 +67,31 @@ class HomeController extends GetxController {
     },
   ];
 
-  void signUserOut() async {
-    await FirebaseAuth.instance.signOut();
-    Get.offAll(() => const AuthPage()); // langsung ganti semua halaman
-  }
-
   void navigateTo(Widget page) {
     Get.to(() => page);
   }
 
-  void fetchUserData() async {
-    if (user.uid.isNotEmpty) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid) // Use user.uid to get the current user's document
-            .get();
+  Future<void> fetchUserCycleStatus(String idToken) async {
+    try {
+      var response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/user/cycle-status'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
 
-        if (userDoc.exists) {
-          fullname.value = userDoc['fullname'] ?? "User"; // Set fullname value
-          print("Fullname: ${fullname.value}");
-        }
-      } catch (e) {
-        Get.snackbar(
-          "Error",
-          "Failed to fetch user data. Please try again later.",
-          snackPosition: SnackPosition.BOTTOM,
-        );
+      if (response.statusCode == 200) {
+        var data = json.decode(response.body);
+
+        fullname.value = data['fullname'] ?? "User";
+        currentCycleMessage.value = data['currentCycleMessage'] ?? "";
+        currentCycleStatus.value = data['currentCycleStatus'] ?? "";
+      } else {
+        print(
+            'Failed to fetch cycle status. Status code: ${response.statusCode}');
       }
-    }
-  }
-
-  Future<void> _checkCycleStatus() async {
-    final userRef =
-        FirebaseFirestore.instance.collection('users').doc(user.uid);
-    final userDoc = await userRef.get();
-
-    if (userDoc.exists) {
-      final userData = userDoc.data();
-      if (userData != null) {
-        final lastPeriodStartDate = userData['lastPeriodStartDate']?.toDate();
-        final lastPeriodEndDate = userData['lastPeriodEndDate']?.toDate();
-        final cycleLength = userData['cycleLength'] ?? 28;
-
-        // Jika ada lastPeriodStartDate, cek status siklus
-        if (lastPeriodStartDate != null) {
-          final today = DateTime.now();
-
-          // Prediksi tanggal periode berikutnya
-          final predictedStartDate =
-              lastPeriodStartDate.add(Duration(days: cycleLength));
-
-          String formattedPredictedStartDate =
-              DateFormat('MMMM d y').format(predictedStartDate);
-          // Print predictedStartDate untuk debugging
-          print("Predicted Start Date: $formattedPredictedStartDate");
-
-          // Cek apakah prediksi bulan depan sudah lewat
-          if (today.isAfter(predictedStartDate)) {
-            // Jika lastPeriodStartDate bulan lalu, tampilkan pesan keterlambatan
-            if (lastPeriodStartDate.month != today.month) {
-              final daysDelayed = today.difference(lastPeriodStartDate).inDays;
-              currentCycleMessage.value = "Your period is delayed!";
-              currentCycleStatus.value =
-                  "Delayed by $daysDelayed days since last month.";
-            }
-          } else if (today.isAfter(lastPeriodStartDate) &&
-              today.isBefore(lastPeriodEndDate)) {
-            currentCycleMessage.value = "Your period has started!";
-            currentCycleStatus.value =
-                "Day ${today.difference(lastPeriodStartDate).inDays + 2}"; // Menunjukkan hari ke-n setelah mulai
-          }
-          // Jika hari ini masih dalam bulan yang sama dan sudah selesai haid
-          else if (today.month == lastPeriodStartDate.month &&
-              today.isBefore(predictedStartDate)) {
-            currentCycleMessage.value = "Your period has ended!";
-            currentCycleStatus.value =
-                "Your period is expected to begin on, $formattedPredictedStartDate";
-          }
-          // Jika periode sudah selesai
-          else if (today
-              .isAfter(lastPeriodStartDate.add(Duration(days: cycleLength)))) {
-            currentCycleMessage.value = "Your period is finished.";
-            currentCycleStatus.value = "End of cycle.";
-          }
-        } else {
-          // Jika tidak ada lastPeriodStartDate, tampilkan pesan bahwa data siklus belum tersedia
-          currentCycleMessage.value = "No cycle data available.";
-          currentCycleStatus.value = "Please log your last period date.";
-        }
-      }
+    } catch (e) {
+      print('Error fetching cycle status: $e');
     }
   }
 }

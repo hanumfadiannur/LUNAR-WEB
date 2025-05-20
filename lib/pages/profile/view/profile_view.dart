@@ -78,7 +78,11 @@ class ProfileView extends GetView<ProfileController> {
           child: Column(
             children: [
               _buildHeader(),
-              Obx(() => Container(
+              Obx(() {
+                if (controller.isLoading.value) {
+                  return Center(child: CircularProgressIndicator());
+                } else {
+                  return Container(
                     padding: const EdgeInsets.all(16),
                     width: 380,
                     decoration: BoxDecoration(
@@ -122,7 +126,9 @@ class ProfileView extends GetView<ProfileController> {
                           ),
                       ],
                     ),
-                  )),
+                  );
+                }
+              }),
               const SizedBox(height: 20),
               _buildProfileOption(
                 title: "Edit Full Name",

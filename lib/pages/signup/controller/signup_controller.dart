@@ -1,8 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lunar/routes/app_routes.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SignUpController extends GetxController {
   final nameController = TextEditingController();
@@ -44,57 +44,28 @@ class SignUpController extends GetxController {
 
   void submitForm(GlobalKey<FormState> formKey) async {
     if (formKey.currentState!.validate()) {
-      try {
-        // Step 1: Register user with email & password
-        UserCredential userCredential =
-            await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: emailController.text.trim(),
-          password: passwordController.text.trim(),
-        );
+      final url = Uri.parse('http://127.0.0.1:8000/api/register');
 
-        // Step 2: Get UID
-        String uid = userCredential.user!.uid;
-
-        // Step 3: Save additional data to Firestore
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
           'fullname': nameController.text.trim(),
           'email': emailController.text.trim(),
-          'created_at': FieldValue.serverTimestamp(),
-          'cycleLength': 27, // Default cycle length
-          'lastPeriodStartDate': null,
-          'lastPeriodEndDate': null,
-        });
+          'password': passwordController.text.trim(),
+        }),
+      );
 
-        // Show success snackbar
-        Get.snackbar(
-          'Success',
-          'Registration successful!',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.pink[100],
-          colorText: Colors.black,
-          margin: const EdgeInsets.all(16),
-          borderRadius: 10,
-        );
-
-        Get.offAllNamed(AppRoutes
-            .signin); // Redirect to sign-in page after successful registration
-      } on FirebaseAuthException catch (e) {
-        String errorMessage = 'Something went wrong';
-        if (e.code == 'email-already-in-use') {
-          errorMessage = 'This email is already registered.';
-        } else if (e.code == 'weak-password') {
-          errorMessage = 'Password is too weak.';
-        }
-
-        Get.snackbar(
-          'Error',
-          errorMessage,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          margin: const EdgeInsets.all(16),
-          borderRadius: 10,
-        );
+      if (response.statusCode == 201) {
+        // Berhasil
+        Get.snackbar('Success', 'Registration successful!');
+        Get.offAllNamed(AppRoutes.signin);
+      } else {
+        // Gagal
+        final error = json.decode(response.body);
+        Get.snackbar('Error', error['error'] ?? 'Something went wrong');
       }
     }
   }

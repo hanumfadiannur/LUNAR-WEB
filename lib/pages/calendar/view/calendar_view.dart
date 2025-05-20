@@ -18,6 +18,14 @@ class _CalendarViewState extends State<CalendarView> {
   final ValueNotifier<DateTime> focusedDay =
       ValueNotifier<DateTime>(DateTime.now());
 
+  final TextEditingController noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    noteController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<CalendarController>();
@@ -298,8 +306,6 @@ class _CalendarViewState extends State<CalendarView> {
                             sel.isAtSameMomentAs(localStartDate))
                         ? 'yes'
                         : null;
-
-                    final noteController = TextEditingController();
 
                     // Ensure startDate is not null before using it
                     if (localStartDate == null ||

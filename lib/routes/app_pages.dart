@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:lunar/pages/auth_page.dart';
 import 'package:lunar/pages/calendar/binding/calendar_binding.dart';
 import 'package:lunar/pages/calendar/view/calendar_view.dart';
 import 'package:lunar/pages/history/binding/history_binding.dart';
@@ -58,6 +59,10 @@ class AppPages {
       name: AppRoutes.home,
       page: () => const HomeView(),
       binding: HomeBinding(),
-    )
+    ),
+    GetPage(
+      name: AppRoutes.auth,
+      page: () => const AuthPage(),
+    ),
   ];
 }

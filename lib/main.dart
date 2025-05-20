@@ -6,16 +6,17 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:get_storage/get_storage.dart';
 import 'firebase_options.dart';
 import 'routes/app_pages.dart';
-import 'pages/auth_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+  await GetStorage.init();
+  runApp(MyApp());
 }
 
 // class MyApp extends StatelessWidget {
@@ -63,14 +64,18 @@ void main() async {
 }*/
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  MyApp({super.key});
+
+  final storage = GetStorage();
 
   @override
   Widget build(BuildContext context) {
+    final String? idToken = storage.read('idToken');
+
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Lunar',
-      home: const AuthPage(), // Ini halaman yang nentuin arah pertama
+      initialRoute: idToken != null && idToken.isNotEmpty ? '/home' : '/auth',
       getPages: AppPages.routes,
     );
   }

@@ -60,7 +60,7 @@ class NotificationController extends GetxController {
           }
 
           if (today.isBefore(predictedStartDate)) {
-            final daysLeft = predictedStartDate.difference(today).inDays;
+            final daysLeft = predictedStartDate.difference(today).inDays + 1;
             notifications.add({
               'type': 'upcoming',
               'message': "Upcoming period in $daysLeft days 🌟",
