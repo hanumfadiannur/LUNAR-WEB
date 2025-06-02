@@ -1,19 +1,19 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:http/http.dart' as http;
 
 class PeriodHistogram extends StatelessWidget {
   const PeriodHistogram({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final String userId = FirebaseAuth.instance.currentUser?.uid ?? "";
-    final String year = DateFormat('yyyy').format(DateTime.now());
+    final box = GetStorage();
+    final idToken = box.read('idToken');
 
     return FutureBuilder<List<int>>(
-      future: fetchPeriodData(userId, year),
+      future: fetchPeriodDataFromApi(idToken),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -132,32 +132,49 @@ class PeriodHistogram extends StatelessWidget {
     return Colors.red;
   }
 
-  Future<List<int>> fetchPeriodData(String userId, String year) async {
+  Future<List<int>> fetchPeriodDataFromApi(String idToken) async {
     List<int> periodDays = [];
 
-    for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
-      final month = monthIndex.toString().padLeft(2, '0');
+    try {
+      var response = await http.get(
+        Uri.parse(
+            'http://127.0.0.1:8000/api/user/cycle-history'), // Ganti 10.0.2.2 kalau emulator
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
 
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('periods')
-            .doc(year)
-            .collection(month)
-            .doc('active')
-            .get();
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
 
-        if (doc.exists) {
-          final data = doc.data();
-          final periodLength = data?['periodLength'];
-          periodDays.add(periodLength is int ? periodLength : 0);
-        } else {
-          periodDays.add(0);
+        final List<dynamic> history = decoded['history'] ?? [];
+
+        for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
+          final monthStr = monthIndex.toString().padLeft(2, '0');
+
+          // Cari data bulan yang sesuai
+          final monthData = history.firstWhere(
+            (element) => element['month'] == monthStr,
+            orElse: () => null,
+          );
+
+          if (monthData != null && monthData['periodLength'] != null) {
+            // Contoh format periodLength: "6 days"
+            final periodLengthStr = monthData['periodLength'] as String;
+            final periodLengthNum =
+                int.tryParse(periodLengthStr.split(' ').first) ?? 0;
+            periodDays.add(periodLengthNum);
+          } else {
+            periodDays.add(0);
+          }
         }
-      } catch (e) {
-        periodDays.add(0);
+      } else {
+        throw Exception('Failed to load cycle history');
       }
+    } catch (e) {
+      print('Error loading cycle history: $e');
+      // Kalau error, return list 0 untuk 12 bulan
+      return List.filled(12, 0);
     }
 
     return periodDays;

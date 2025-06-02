@@ -61,6 +61,13 @@ class SignInController extends GetxController {
                 userId: uid,
                 idToken: idToken,
                 onDataSaved: () {
+                  Get.snackbar(
+                    'Login Successful',
+                    'Welcome!',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                  );
                   Get.offAllNamed(AppRoutes.home);
                 },
               ),

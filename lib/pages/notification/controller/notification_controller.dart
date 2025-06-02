@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationController extends GetxController {
   final notifications = <Map<String, dynamic>>[].obs;
@@ -13,81 +14,42 @@ class NotificationController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    loadNotifications();
+    final box = GetStorage();
+    final idToken = box.read('idToken');
+    if (idToken != null) {
+      loadNotifications(idToken);
+    }
   }
 
-  Future<void> loadNotifications() async {
-    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
-    final userDoc = await userRef.get();
+  Future<void> loadNotifications(String idToken) async {
+    try {
+      var response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/user/notification'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
 
-    if (userDoc.exists) {
-      final userData = userDoc.data();
-      if (userData != null) {
-        final lastPeriodStartDate = userData['lastPeriodStartDate']?.toDate();
-        final lastPeriodEndDate = userData['lastPeriodEndDate']?.toDate();
-        final cycleLength = userData['cycleLength'] ?? 28;
+      if (response.statusCode == 200) {
+        var data = response.body;
+        final decoded = jsonDecode(data);
 
-        final today = DateTime.now();
-
-        if (lastPeriodStartDate != null) {
-          final predictedStartDate =
-              lastPeriodStartDate.add(Duration(days: cycleLength));
-          String formattedPredictedStartDate =
-              DateFormat('MMMM d, y').format(predictedStartDate);
-
-          if (today.isAfter(predictedStartDate)) {
-            if (lastPeriodStartDate.month != today.month) {
-              final daysDelayed = today.difference(lastPeriodStartDate).inDays;
-              notifications.add({
-                'type': 'delayed',
-                'message': "Your period is delayed!",
-                'timestamp': today,
-                'additionalText':
-                    "Delayed by $daysDelayed days since last month."
-              });
-            }
+        // Parsing dan konversi timestamp string ke DateTime
+        final List<Map<String, dynamic>> loadedNotifications =
+            (decoded['notifications'] as List<dynamic>? ?? []).map((notif) {
+          final map = Map<String, dynamic>.from(notif);
+          if (map['timestamp'] is String) {
+            map['timestamp'] = DateTime.parse(map['timestamp']);
           }
+          return map;
+        }).toList();
 
-          if (today.isAfter(lastPeriodStartDate) &&
-              today.isBefore(lastPeriodEndDate)) {
-            notifications.add({
-              'type': 'started',
-              'message': "Your period has started!🌟",
-              'timestamp': today,
-              'additionalText':
-                  "Day ${today.difference(lastPeriodStartDate).inDays + 2} of your cycle."
-            });
-          }
-
-          if (today.isBefore(predictedStartDate)) {
-            final daysLeft = predictedStartDate.difference(today).inDays + 1;
-            notifications.add({
-              'type': 'upcoming',
-              'message': "Upcoming period in $daysLeft days 🌟",
-              'timestamp': today,
-              'additionalText': "Expected start: $formattedPredictedStartDate"
-            });
-          }
-
-          if (today
-              .isAfter(lastPeriodStartDate.add(Duration(days: cycleLength)))) {
-            notifications.add({
-              'type': 'finished',
-              'message': "Your period has finished.",
-              'timestamp': today,
-              'additionalText': "End of current cycle."
-            });
-          }
-        } else {
-          // Ini baru jalan kalau lastPeriodStartDate == null
-          notifications.add({
-            'type': 'no_data',
-            'message': "No cycle data available.",
-            'timestamp': today,
-            'additionalText': "Please log your last period date."
-          });
-        }
+        notifications.assignAll(loadedNotifications);
+      } else {
+        throw Exception('Failed to load notifications');
       }
+    } catch (e) {
+      print('Error loading notifications: $e');
     }
   }
 }

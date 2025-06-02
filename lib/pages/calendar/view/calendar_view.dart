@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lunar/components/sidebarmenu.dart';
+import 'package:lunar/pages/calendar/controller/calendar_controller.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../routes/app_routes.dart';
-import '../controller/calendar_controller.dart';
 
 class CalendarView extends StatefulWidget {
   const CalendarView({super.key});
@@ -19,13 +20,6 @@ class _CalendarViewState extends State<CalendarView> {
       ValueNotifier<DateTime>(DateTime.now());
 
   final TextEditingController noteController = TextEditingController();
-
-  @override
-  void dispose() {
-    noteController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<CalendarController>();
@@ -93,21 +87,26 @@ class _CalendarViewState extends State<CalendarView> {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Obx(() => Text(
-                            controller.nextPeriodPrediction.value,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                            ),
-                          )),
-                    ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Obx(() {
+                          if (controller.isLoading.value) {
+                            return CircularProgressIndicator(); // tampilin loading spinner
+                          } else {
+                            return Text(
+                              controller.nextPeriodPrediction.value,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            );
+                          }
+                        })),
                   ],
                 ),
               ),
@@ -268,8 +267,33 @@ class _CalendarViewState extends State<CalendarView> {
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
-                            await controller
-                                .removeNote(controller.selectedDay.value!);
+                            final box = GetStorage();
+                            final idToken = box.read('idToken');
+                            final userId = box.read('uid');
+
+                            // Hapus note dulu
+                            bool success = await controller.removeNote(
+                              idToken: idToken,
+                              userId: userId,
+                              noteDate: controller.selectedDay.value!,
+                            );
+
+                            if (success) {
+                              // Kalau mau, bisa kasih snackbar juga buat info ke user
+                              Get.snackbar(
+                                'Success',
+                                'Note removed and events updated',
+                                backgroundColor: Colors.green,
+                                colorText: Colors.white,
+                              );
+                            } else {
+                              Get.snackbar(
+                                'Error',
+                                'Failed to remove note',
+                                backgroundColor: Colors.red,
+                                colorText: Colors.white,
+                              );
+                            }
                           },
                         ),
                       ),
@@ -308,9 +332,199 @@ class _CalendarViewState extends State<CalendarView> {
                         : null;
 
                     // Ensure startDate is not null before using it
-                    if (localStartDate == null ||
-                        selectedDate.isBefore(localStartDate) ||
-                        selectedDate.isAtSameMomentAs(localStartDate)) {
+
+                    print("selectedDate: ${selectedDate.toLocal()}");
+                    print("localStartDate: $localStartDate");
+
+                    DateTime normalizeDate(DateTime dt) {
+                      return DateTime(dt.year, dt.month, dt.day);
+                    }
+
+                    if (localStartDate == null) {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (_) {
+                          return StatefulBuilder(
+                            builder: (context, setState) {
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  left: 20,
+                                  right: 20,
+                                  bottom:
+                                      MediaQuery.of(context).viewInsets.bottom +
+                                          20,
+                                  top: 20,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Add Event for ${DateFormat('MMMM d, y').format(selectedDate.toLocal())}",
+                                      style: GoogleFonts.dmSans(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    const Text("Is this the start?"),
+                                    Row(
+                                      children: [
+                                        Radio<String>(
+                                          value: 'yes',
+                                          groupValue: selectedStart,
+                                          onChanged: (value) {
+                                            setState(() {
+                                              selectedStart = value;
+                                              if (selectedStart == 'yes') {
+                                                localStartDate = selectedDate;
+                                                controller.startDate.value =
+                                                    localStartDate;
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        const Text("Yes"),
+                                        const SizedBox(width: 20),
+                                        Radio<String>(
+                                          value: 'no',
+                                          groupValue: selectedStart,
+                                          onChanged: (value) {
+                                            setState(() {
+                                              selectedStart = value;
+                                            });
+                                          },
+                                        ),
+                                        const Text("No"),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    TextField(
+                                      controller: noteController,
+                                      maxLines: 3,
+                                      decoration: const InputDecoration(
+                                        hintText: "Add notes...",
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        if (selectedStart == null) {
+                                          Get.snackbar(
+                                            "Missing Info",
+                                            "Please select Start or No",
+                                            backgroundColor: Colors.redAccent,
+                                            colorText: Colors.white,
+                                          );
+                                          return;
+                                        }
+
+                                        final box = GetStorage();
+                                        final idToken = box.read('idToken');
+                                        final userId = box.read('uid');
+                                        final note = noteController.text ?? ' ';
+
+                                        bool success = false;
+
+                                        if (selectedStart == 'yes') {
+                                          var enddate = selectedDate
+                                              .add(const Duration(days: 5));
+                                          print("selectedDate: $selectedDate");
+                                          print("enddate: $enddate");
+
+                                          // Tunggu addEvent 'start' selesai
+                                          success = await controller.addEvent(
+                                            idToken: idToken,
+                                            userId: userId,
+                                            eventDate: selectedDate,
+                                            eventType: 'start',
+                                            note: note,
+                                          );
+
+                                          // Baru addEvent 'end', tunggu juga selesai
+                                          if (success) {
+                                            success = await controller.addEvent(
+                                              idToken: idToken,
+                                              userId: userId,
+                                              eventDate: enddate,
+                                              eventType: 'end',
+                                              note: "hari terakhir haid",
+                                            );
+
+                                            // Tampilkan snackbar sesuai hasil
+
+                                            Get.snackbar(
+                                              "Success",
+                                              "Event added.",
+                                              backgroundColor: Colors.green,
+                                              colorText: Colors.white,
+                                            );
+                                            controller
+                                                .fetchAllPeriodEvents(idToken);
+                                            controller
+                                                .fetchNextPeriodPrediction(
+                                                    idToken);
+                                            await Future.delayed(
+                                                Duration(milliseconds: 300));
+                                          }
+                                        } else if (selectedStart == 'no') {
+                                          controller.startDate.value =
+                                              null; // Reset start date di UI
+
+                                          success =
+                                              await controller.removeEvent(
+                                            idToken: idToken,
+                                            userId: userId,
+                                            eventDate:
+                                                normalizeDate(selectedDate),
+                                          );
+
+                                          if (success) {
+                                            if (success) {
+                                              await controller
+                                                  .fetchAllPeriodEvents(
+                                                      idToken);
+                                              await controller
+                                                  .fetchNextPeriodPrediction(
+                                                      idToken);
+                                            }
+                                          }
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFFF45F69),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 20, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Save Event",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    } else if ((localStartDate != null &&
+                            normalizeDate(selectedDate)
+                                .isBefore(normalizeDate(localStartDate))) ||
+                        (localStartDate != null &&
+                            normalizeDate(selectedDate).isAtSameMomentAs(
+                                normalizeDate(localStartDate)))) {
                       // If start date is not set or selected date is before start date, show the "Is this the Start?" bottom sheet
                       showModalBottomSheet(
                         context: context,
@@ -385,7 +599,7 @@ class _CalendarViewState extends State<CalendarView> {
                                     ),
                                     const SizedBox(height: 20),
                                     ElevatedButton(
-                                      onPressed: () {
+                                      onPressed: () async {
                                         if (selectedStart == null) {
                                           Get.snackbar(
                                             "Missing Info",
@@ -396,13 +610,43 @@ class _CalendarViewState extends State<CalendarView> {
                                           return;
                                         }
 
-                                        final note = noteController.text;
+                                        final box = GetStorage();
+                                        final idToken = box.read('idToken');
+                                        final userId = box.read('uid');
+                                        final note = noteController.text ?? ' ';
 
                                         // Jika 'yes' dipilih, tandai tanggal tersebut sebagai start date
                                         if (selectedStart == 'yes') {
-                                          controller.markStartEndPeriod(
-                                              selectedDate,
+                                          var enddate = selectedDate
+                                              .add(const Duration(days: 5));
+                                          print("selectedDate: $selectedDate");
+                                          print("enddate: $enddate");
+
+                                          controller.addEvent(
+                                              idToken: idToken,
+                                              userId: userId,
+                                              eventDate: selectedDate,
+                                              eventType: 'start',
                                               note: note);
+
+                                          controller.addEvent(
+                                              idToken: idToken,
+                                              userId: userId,
+                                              eventDate: enddate,
+                                              eventType: 'end',
+                                              note: "hari terakhir haid");
+
+                                          Get.snackbar(
+                                            "Success",
+                                            "Event added.",
+                                            backgroundColor: Colors.green,
+                                            colorText: Colors.white,
+                                          );
+                                          await controller
+                                              .fetchAllPeriodEvents(idToken);
+                                          await controller
+                                              .fetchNextPeriodPrediction(
+                                                  idToken);
                                         }
                                         // Jika 'no' dipilih, reset tanggal event dan hapus di Firestore
                                         else if (selectedStart == 'no') {
@@ -410,12 +654,12 @@ class _CalendarViewState extends State<CalendarView> {
                                               null; // Reset start date di tampilan
 
                                           // Reset startDate dan endDate di Firestore
-                                          controller.removeEventAndNotes(
-                                              selectedDate);
+                                          controller.removeEvent(
+                                            idToken: idToken,
+                                            userId: userId,
+                                            eventDate: selectedDate,
+                                          );
                                         }
-
-                                        Navigator.pop(
-                                            context); // Menutup bottom sheet setelah memilih
                                       },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor:
@@ -521,15 +765,35 @@ class _CalendarViewState extends State<CalendarView> {
                                     const SizedBox(height: 20),
                                     ElevatedButton(
                                       onPressed: () {
-                                        final note = noteController.text;
+                                        final box = GetStorage();
+                                        final idToken = box.read('idToken');
+                                        final userId = box.read('uid');
+                                        final note = noteController.text ?? ' ';
 
                                         if (localSelectedEnd == 'yes') {
                                           controller.addEvent(
-                                              selectedDate, 'end',
+                                              idToken: idToken,
+                                              userId: userId,
+                                              eventDate: selectedDate,
+                                              eventType: 'end',
                                               note: note);
+
+                                          Get.snackbar(
+                                            "Success",
+                                            "Event added.",
+                                            backgroundColor: Colors.green,
+                                            colorText: Colors.white,
+                                          );
+                                          controller
+                                              .fetchAllPeriodEvents(idToken);
+                                          controller.fetchNextPeriodPrediction(
+                                              idToken);
                                         } else {
                                           controller.addEvent(
-                                              selectedDate, 'noteOnly',
+                                              idToken: idToken,
+                                              userId: userId,
+                                              eventDate: selectedDate,
+                                              eventType: 'noteOnly',
                                               note: note);
                                         }
 

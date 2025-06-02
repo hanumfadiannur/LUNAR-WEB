@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Pastikan sudah menambahkan Firebase
-import 'package:intl/intl.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:http/http.dart' as http;
 
 class HistoryController extends GetxController {
   var startDate = ''.obs; // Menyimpan tanggal mulai siklus
@@ -16,94 +18,63 @@ class HistoryController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    fetchUserData(); // Memanggil fungsi untuk mengambil data penggun
-    fetchCycleHistory(); // Memanggil fungsi untuk mengambil data sejarah siklus
+
+    final box = GetStorage();
+    final idToken = box.read('idToken');
+    if (idToken != null) {
+      fetchUserData(idToken);
+      fetchCycleHistory(idToken);
+    }
   }
 
-  void fetchUserData() async {
-    if (userId.isNotEmpty) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
+  Future<void> fetchUserData(String idToken) async {
+    try {
+      var response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/user/cycle-status'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
+      );
 
-        if (userDoc.exists) {
-          fullname.value = userDoc['fullname'] ?? "User";
-        }
-      } catch (e) {
-        print("Error fetching user data: $e");
+      if (response.statusCode == 200) {
+        var data = json.decode(response.body);
+
+        fullname.value = data['fullname'] ?? "User";
+      } else {
+        print(
+            'Failed to fetch cycle status. Status code: ${response.statusCode}');
       }
+    } catch (e) {
+      print('Error fetching cycle status: $e');
     }
   }
 
   // Fungsi untuk mengambil data siklus
-  void fetchCycleHistory() async {
+  void fetchCycleHistory(String idToken) async {
     try {
-      final year = DateFormat('yyyy')
-          .format(DateTime.now()); // Mendapatkan tahun sekarang
-
-      List<Map<String, dynamic>> history = []; // Menyimpan riwayat siklus
-
-      // Loop melalui 12 bulan
-      for (int monthIndex = 1; monthIndex <= 12; monthIndex++) {
-        final month = monthIndex
-            .toString()
-            .padLeft(2, '0'); // Format bulan dengan dua digit
-
-        // Ambil data dari Firestore
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('periods')
-            .doc(year)
-            .collection(month)
-            .doc('active')
-            .get();
-
-        if (doc.exists) {
-          final data = doc.data()!;
-
-          // Mengambil tanggal mulai dan selesai
-          final start = (data['start_date'] as Timestamp).toDate();
-          final end = (data['end_date'] as Timestamp).toDate();
-
-          // Menangani 'notes', apakah berupa Map atau List
-          final notesData = data['notes'];
-          Map<String, dynamic> notes = {};
-
-          if (notesData is Map) {
-            notes = Map<String, dynamic>.from(notesData);
-          } else if (notesData is List) {
-            // Mengubah List menjadi Map dengan indeks sebagai key
-            notes = {
-              for (var i = 0; i < notesData.length; i++) '$i': notesData[i]
-            };
-          }
-
-          // Menghitung panjang periode dan selisih hari
-          final period = data['periodLength'] ?? 0;
-          final daysDifference = DateTime.now().difference(start).inDays;
-
-          // Menambahkan data siklus ke dalam history
-          history.add({
-            'month': month,
-            'startDate': DateFormat('d MMMM yyyy').format(start),
-            'periodLength': "$period days",
-            'daysAgo': "$daysDifference days ago",
-            'notes': notes,
-          });
-        }
-      }
-
-      // Menyimpan hasil riwayat siklus ke dalam state reaktif
-      cycleHistory.value = history;
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to fetch cycle history: $e",
-        snackPosition: SnackPosition.BOTTOM,
+      var response = await http.get(
+        Uri.parse('http://127.0.0.1:8000/api/user/cycle-history'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+        },
       );
+
+      if (response.statusCode == 200) {
+        var data = response.body;
+        final decoded = jsonDecode(data);
+
+        // Ubah list dynamic jadi List<Map<String, dynamic>>
+        final List<Map<String, dynamic>> history =
+            (decoded['history'] as List<dynamic>? ?? [])
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList();
+
+        cycleHistory.assignAll(history);
+      } else {
+        throw Exception('Failed to load cycle history');
+      }
+    } catch (e) {
+      print('Error loading cycle history: $e');
     }
   }
 }

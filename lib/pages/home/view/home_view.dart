@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lunar/components/periodchart.dart';
 import 'package:lunar/components/sidebarmenu.dart';
-import 'package:lunar/pages/content_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lunar/routes/app_routes.dart';
@@ -154,7 +153,9 @@ class HomeView extends GetView<HomeController> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: () => controller.navigateTo(const ContentPage()),
+          onTap: () {
+            Get.toNamed(AppRoutes.content);
+          },
           child: Text(
             'Content',
             style:
@@ -179,7 +180,9 @@ class HomeView extends GetView<HomeController> {
 
   Widget _buildContentCard(Map<String, dynamic> content) {
     return GestureDetector(
-      onTap: () => controller.navigateTo(const ContentPage()),
+      onTap: () {
+        Get.toNamed(AppRoutes.content);
+      },
       child: Container(
         margin: const EdgeInsets.only(right: 5),
         padding: const EdgeInsets.all(10),

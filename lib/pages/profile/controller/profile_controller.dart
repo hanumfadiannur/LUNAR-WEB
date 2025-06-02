@@ -88,6 +88,9 @@ class ProfileController extends GetxController {
       );
 
       if (response.statusCode == 200) {
+        await fetchUserDataFromApi(idToken); // Refresh user data
+        name.value = newFullName; // Update local name variable
+        box.write('fullname', newFullName); // Update in local storage
         print('Full name berhasil diupdate!');
         Get.snackbar("Success", "Full name updated.");
       } else {

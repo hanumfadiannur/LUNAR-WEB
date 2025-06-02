@@ -60,7 +60,12 @@ class SignUpController extends GetxController {
 
       if (response.statusCode == 201) {
         // Berhasil
-        Get.snackbar('Success', 'Registration successful!');
+        Get.snackbar(
+          'Success',
+          'Registration successful!',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
         Get.offAllNamed(AppRoutes.signin);
       } else {
         // Gagal
