@@ -280,7 +280,7 @@ class CalendarController extends GetxController {
       }
     }
 
-    // Merge newEvents ke events tanpa hapus event lama
+    // Merge newEvents ke dalam events
     for (var entry in newEvents.entries) {
       final existingList = events[entry.key] ?? [];
       final newList = entry.value
